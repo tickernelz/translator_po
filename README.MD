@@ -39,11 +39,11 @@ Create a `config.json` file in the root directory of the project. You can use th
     "source_lang": "id",
     "target_lang": "en",
     "max_msgid_length": 300,
-    "DeeplTranslator": {"api_key": "", "use_free_api": True},
+    "DeeplTranslator": {"api_key": "", "use_free_api": true},
     "QcriTranslator": {"api_key": ""},
     "YandexTranslator": {"api_key": ""},
     "MicrosoftTranslator": {"api_key": "", "region": ""},
-    "LibreTranslator": {"api_key": "", "use_free_api": True, "custom_url": ""},
+    "LibreTranslator": {"api_key": "", "use_free_api": true, "custom_url": ""},
     "PapagoTranslator": {"client_id": "", "secret_key": ""},
     "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
     "BaiduTranslator": {"appid": "", "appkey": ""}
