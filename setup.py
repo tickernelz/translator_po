@@ -3,7 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name='translator_po',
     version='0.1.0',
-    packages=find_packages(),
+    packages=find_packages(where='src'),
+    package_dir={'': 'src'},
     install_requires=[
         'polib==1.2.0',
         'deep-translator==1.11.4',
@@ -12,8 +13,8 @@ setup(
     author='Zahfron Adani Kautsar',
     author_email='zhafronadani@gmail.com',
     description='Translator PO is a Python-based tool designed to translate .po and .pot files using various '
-    'translation services. It supports multiple translators like Google, Microsoft, Deepl, and more, '
-    'allowing for flexible and efficient translation of localization files.',
+                'translation services. It supports multiple translators like Google, Microsoft, Deepl, and more, '
+                'allowing for flexible and efficient translation of localization files.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/tickernelz/translator_po',
@@ -23,4 +24,9 @@ setup(
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.6',
+    entry_points={
+        'console_scripts': [
+            'translator_po=translator_po.main:main',
+        ],
+    },
 )
