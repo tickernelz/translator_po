@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import json
+import site
 
 import polib
 from deep_translator import (
@@ -55,6 +56,11 @@ DEFAULT_CONFIG = {
     "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
     "BaiduTranslator": {"appid": "", "appkey": ""},
 }
+
+
+def update_metadata(po):
+    po.metadata['Last-Translator'] = 'Zahfron Adani Kautsar (tickernelz)'
+    po.metadata['Language-Team'] = 'Zahfron Adani Kautsar (tickernelz)'
 
 
 class PoFileTranslator:
@@ -152,29 +158,19 @@ class PoFileTranslator:
             logging.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
             return entry, None
 
-    def update_metadata(self, po):
-        po.metadata['Last-Translator'] = 'Zahfron Adani Kautsar alias tickernelz'
-        po.metadata['Language-Team'] = 'Zahfron Adani Kautsar alias tickernelz'
-
     def translate_po_file(self):
         if self.data:
             po = polib.pofile(self.data)
             total_entries = len(po)
             logging.info(f"Translating file: {self.file_name} with {total_entries} entries.")
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = [executor.submit(self.translate_entry, entry) for entry in po if entry.msgid]
-                for future in tqdm(
-                    concurrent.futures.as_completed(futures),
-                    total=total_entries,
-                    ncols=100,
-                    desc=f"Translating {self.file_name}",
-                ):
-                    entry, translation = future.result()
+            for entry in tqdm(po, total=total_entries, ncols=100, desc=f"Translating {self.file_name}"):
+                if entry.msgid:
+                    entry, translation = self.translate_entry(entry)
                     if translation is not None:
                         entry.msgstr = translation
 
-            self.update_metadata(po)
+            update_metadata(po)
             return str(po)
 
 
@@ -213,22 +209,33 @@ def process_file(file_path, output_folder, config, odoo_output=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Translate .po and .pot files.")
-    parser.add_argument('--file_path', type=str, help='Path to the input .po or .pot file')
-    parser.add_argument('--folder_path', type=str, help='Path to the folder containing .po or .pot files')
-    parser.add_argument('output_folder', type=str, help='Path to the output folder')
-    parser.add_argument('config_file', type=str, default='config.json', help='Path to the configuration file')
-    parser.add_argument('--odoo_output', action='store_true', help='Enable Odoo output format')
+    parser.add_argument('-f', '--file_path', type=str, help='Path to the input .po or .pot file')
+    parser.add_argument('-d', '--folder_path', type=str, help='Path to the folder containing .po or .pot files')
+    parser.add_argument('-o', '--output_folder', type=str, help='Path to the output folder')
+    parser.add_argument('-c', '--config_file', type=str, default='config.json', help='Path to the configuration file')
+    parser.add_argument('-O', '--odoo_output', action='store_true', help='Enable Odoo output format')
 
     args = parser.parse_args()
 
+    # Determine the configuration file path
+    if any(site_path in os.path.abspath(__file__) for site_path in site.getsitepackages()):
+        # The program is installed as a module
+        config_dir = os.path.join(os.path.expanduser("~"), ".translator_po")
+    else:
+        # The program is not installed as a module
+        config_dir = os.path.dirname(os.path.abspath(__file__))
+
+    os.makedirs(config_dir, exist_ok=True)
+    config_file_path = os.path.join(config_dir, args.config_file)
+
     # Check if the configuration file exists, if not create it with default settings
-    if not os.path.exists(args.config_file):
-        with open(args.config_file, 'w') as config_file:
+    if not os.path.exists(config_file_path):
+        with open(config_file_path, 'w') as config_file:
             json.dump(DEFAULT_CONFIG, config_file, indent=4)
-        logging.info(f"Configuration file not found. Created default config at {args.config_file}")
+        logging.info(f"Configuration file not found. Created default config at {config_file_path}")
 
     # Load configuration
-    with open(args.config_file, 'r') as config_file:
+    with open(config_file_path, 'r') as config_file:
         config = json.load(config_file)
 
     if args.file_path:
