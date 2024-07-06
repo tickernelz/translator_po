@@ -1,5 +1,5 @@
 import argparse
-import concurrent.futures
+import multiprocessing
 import logging
 import os
 import re
@@ -21,7 +21,7 @@ from deep_translator import (
     ChatGptTranslator,
     BaiduTranslator,
 )
-from tqdm import tqdm
+from atpbar import atpbar, register_reporter, find_reporter, flush
 
 # Configure logging to include timestamps
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -133,7 +133,7 @@ class PoFileTranslator:
     def translate_entry(self, entry):
         try:
             if len(entry.msgid) > self.max_msgid_length:
-                return entry, None
+                return entry
 
             # Find all placeholders
             placeholders = re.findall(r'%\(\w+\)s|%\w|%%', entry.msgid)
@@ -153,22 +153,19 @@ class PoFileTranslator:
             for placeholder_marker, placeholder in placeholder_map.items():
                 translated_text = translated_text.replace(placeholder_marker, placeholder)
 
-            return entry, translated_text
+            entry.msgstr = translated_text
+            return entry
         except Exception as e:
             logging.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
-            return entry, None
+            return entry
 
     def translate_po_file(self):
         if self.data:
             po = polib.pofile(self.data)
-            total_entries = len(po)
-            logging.info(f"Translating file: {self.file_name} with {total_entries} entries.")
 
-            for entry in tqdm(po, total=total_entries, ncols=100, desc=f"Translating {self.file_name}"):
+            for entry in atpbar(po, name=f"Translating {self.file_name}"):
                 if entry.msgid:
-                    entry, translation = self.translate_entry(entry)
-                    if translation is not None:
-                        entry.msgstr = translation
+                    self.translate_entry(entry)
 
             update_metadata(po)
             return str(po)
@@ -202,9 +199,39 @@ def process_file(file_path, output_folder, config, odoo_output=False):
     try:
         with open(output_file_path, "w") as file:
             file.write(translator.new_data)
-        logging.info(f"Translation completed successfully. Output file: {output_file_path}")
     except Exception as e:
         logging.error(f"Error writing to file: {output_file_path}, Error: {e}")
+
+
+def worker(reporter, task, queue):
+    register_reporter(reporter)
+    while True:
+        args = queue.get()
+        if args is None:
+            queue.task_done()
+            break
+        task(*args)
+        queue.task_done()
+
+
+def process_files_in_folder(folder_path, output_folder, config, odoo_output):
+    files = [os.path.join(folder_path, file_name) for file_name in os.listdir(folder_path) if file_name.endswith('.po') or file_name.endswith('.pot')]
+    nprocesses = multiprocessing.cpu_count()
+    reporter = find_reporter()
+    queue = multiprocessing.JoinableQueue()
+
+    for i in range(nprocesses):
+        p = multiprocessing.Process(target=worker, args=(reporter, process_file, queue))
+        p.start()
+
+    for file_path in files:
+        queue.put((file_path, output_folder, config, odoo_output))
+
+    for i in range(nprocesses):
+        queue.put(None)
+
+    queue.join()
+    flush()
 
 
 def main():
@@ -241,13 +268,12 @@ def main():
     if args.file_path:
         process_file(args.file_path, args.output_folder, config, args.odoo_output)
     elif args.folder_path:
-        for file_name in os.listdir(args.folder_path):
-            if file_name.endswith('.po') or file_name.endswith('.pot'):
-                file_path = os.path.join(args.folder_path, file_name)
-                process_file(file_path, args.output_folder, config, args.odoo_output)
+        process_files_in_folder(args.folder_path, args.output_folder, config, args.odoo_output)
+        logging.info("Translation complete.")
     else:
         logging.error("Either --file_path or --folder_path must be provided.")
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('fork', force=True)
     main()
