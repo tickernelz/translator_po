@@ -12,9 +12,8 @@ setup(
     ],
     author='Zahfron Adani Kautsar',
     author_email='zhafronadani@gmail.com',
-    description='Translator PO is a Python-based tool designed to translate .po and .pot files using various '
-                'translation services. It supports multiple translators like Google, Microsoft, Deepl, and more, '
-                'allowing for flexible and efficient translation of localization files.',
+    description='This project is a command-line tool for translating `.po` and `.pot` files using various translation '
+                'services. It supports multiple translators and can handle placeholders in the text.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/tickernelz/translator_po',
