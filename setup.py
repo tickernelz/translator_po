@@ -2,13 +2,13 @@ from setuptools import setup, find_packages
 
 setup(
     name='translator_po',
-    version='0.1.0',
+    version='0.1.2',
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
     install_requires=[
         'polib==1.2.0',
         'deep-translator==1.11.4',
-        'atpbar==1.1.4',
+        'tqdm==4.66.1',
     ],
     author='Zahfron Adani Kautsar',
     author_email='zhafronadani@gmail.com',

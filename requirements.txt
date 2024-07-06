@@ -1,4 +1,4 @@
 polib==1.2.0
 deep-translator==1.11.4
-atpbar==1.1.4
+tqdm==4.66.1
 setuptools~=69.5.1

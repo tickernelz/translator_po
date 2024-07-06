@@ -1,10 +1,11 @@
 import argparse
-import multiprocessing
+import json
 import logging
+import multiprocessing
 import os
 import re
-import json
 import site
+from functools import partial
 
 import polib
 from deep_translator import (
@@ -21,7 +22,7 @@ from deep_translator import (
     ChatGptTranslator,
     BaiduTranslator,
 )
-from atpbar import atpbar, register_reporter, find_reporter, flush
+from tqdm import tqdm
 
 # Configure logging to include timestamps
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -159,13 +160,39 @@ class PoFileTranslator:
             logging.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
             return entry
 
+    def translate_entries_chunk(self, entries_chunk):
+        return [self.translate_entry(entry) for entry in entries_chunk]
+
     def translate_po_file(self):
         if self.data:
             po = polib.pofile(self.data)
+            entries = po.untranslated_entries()
 
-            for entry in atpbar(po, name=f"Translating {self.file_name}"):
-                if entry.msgid:
-                    self.translate_entry(entry)
+            # Determine the number of available CPU cores
+            num_cores = multiprocessing.cpu_count()
+
+            # Split entries into chunks
+            chunk_size = len(entries) // num_cores
+            chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
+
+            # Create a pool of workers
+            with multiprocessing.Pool(processes=num_cores) as pool:
+                # Use partial to pass the self parameter to the worker function
+                worker_func = partial(self.translate_entries_chunk)
+
+                # Initialize tqdm progress bar
+                with tqdm(total=len(chunks), desc=f"Translating {self.file_name}") as pbar:
+                    results = []
+                    for result in pool.imap(worker_func, chunks):
+                        results.append(result)
+                        pbar.update()
+
+            # Flatten the list of results
+            translated_entries = [entry for sublist in results for entry in sublist]
+
+            # Update the po object with translated entries
+            po.clear()
+            po.extend(translated_entries)
 
             update_metadata(po)
             return str(po)
@@ -203,8 +230,7 @@ def process_file(file_path, output_folder, config, odoo_output=False):
         logging.error(f"Error writing to file: {output_file_path}, Error: {e}")
 
 
-def worker(reporter, task, queue):
-    register_reporter(reporter)
+def worker(task, queue):
     while True:
         args = queue.get()
         if args is None:
@@ -215,13 +241,16 @@ def worker(reporter, task, queue):
 
 
 def process_files_in_folder(folder_path, output_folder, config, odoo_output):
-    files = [os.path.join(folder_path, file_name) for file_name in os.listdir(folder_path) if file_name.endswith('.po') or file_name.endswith('.pot')]
+    files = [
+        os.path.join(folder_path, file_name)
+        for file_name in os.listdir(folder_path)
+        if file_name.endswith('.po') or file_name.endswith('.pot')
+    ]
     nprocesses = multiprocessing.cpu_count()
-    reporter = find_reporter()
     queue = multiprocessing.JoinableQueue()
 
     for i in range(nprocesses):
-        p = multiprocessing.Process(target=worker, args=(reporter, process_file, queue))
+        p = multiprocessing.Process(target=worker, args=(process_file, queue))
         p.start()
 
     for file_path in files:
@@ -231,7 +260,6 @@ def process_files_in_folder(folder_path, output_folder, config, odoo_output):
         queue.put(None)
 
     queue.join()
-    flush()
 
 
 def main():

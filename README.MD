@@ -12,6 +12,8 @@ Features
 - Can process individual files or entire folders.
 - Supports custom configuration through a JSON file.
 - Option to output in Odoo format.
+- Uses `tqdm` for progress reporting.
+- Supports multiprocessing for faster translation.
 
 Installation
 ------------
