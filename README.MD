@@ -17,16 +17,24 @@ Installation
 
 1.  Clone the repository:
 
-    `git clone https://github.com/tickernelz/translator_po.git
-    cd translator_po`
+    ```console
+    git clone https://github.com/tickernelz/translator_po.git
+    ```
+    ```console
+    cd translator_po
+    ```
 
 2.  Install the required dependencies:
 
-    `pip install -r requirements.txt`
+    ```console
+    pip install -r requirements.txt
+    ```
 
 3.  Install the package as a pip module:
 
-    `pip install .`
+    ```console
+    pip install .
+    ```
 
 Usage
 -----
@@ -64,20 +72,22 @@ The configuration file is a JSON file that specifies the translator settings. If
 
 ### Default Configuration
 
-`{
+```json
+{
     "translator": "GoogleTranslator",
     "source_lang": "id",
     "target_lang": "en",
     "max_msgid_length": 300,
-    "DeeplTranslator": {"api_key": "", "use_free_api": True},
+    "DeeplTranslator": {"api_key": "", "use_free_api": true},
     "QcriTranslator": {"api_key": ""},
     "YandexTranslator": {"api_key": ""},
     "MicrosoftTranslator": {"api_key": "", "region": ""},
-    "LibreTranslator": {"api_key": "", "use_free_api": True, "custom_url": ""},
+    "LibreTranslator": {"api_key": "", "use_free_api": true, "custom_url": ""},
     "PapagoTranslator": {"client_id": "", "secret_key": ""},
     "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
     "BaiduTranslator": {"appid": "", "appkey": ""}
-}`
+}
+```
 
 Logging
 -------
