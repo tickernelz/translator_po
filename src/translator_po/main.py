@@ -1,4 +1,5 @@
 import argparse
+import concurrent.futures
 import json
 import logging
 import multiprocessing
@@ -173,17 +174,14 @@ class PoFileTranslator:
 
             # Split entries into chunks
             chunk_size = len(entries) // num_cores
-            chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
+            chunks = [entries[i: i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
             # Create a pool of workers
-            with multiprocessing.Pool(processes=num_cores) as pool:
-                # Use partial to pass the self parameter to the worker function
+            with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
                 worker_func = partial(self.translate_entries_chunk)
-
-                # Initialize tqdm progress bar
                 with tqdm(total=len(chunks), desc=f"Translating {self.file_name}") as pbar:
                     results = []
-                    for result in pool.imap(worker_func, chunks):
+                    for result in executor.map(worker_func, chunks):
                         results.append(result)
                         pbar.update()
 
