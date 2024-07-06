@@ -1,82 +1,88 @@
-# Translator PO
+Translator PO
+=============
 
-Translator PO is a Python-based tool designed to translate `.po` and `.pot` files using various translation services. It supports multiple translators like Google, Microsoft, Deepl, and more, allowing for flexible and efficient translation of localization files.
+This project is a command-line tool for translating `.po` and `.pot` files using various translation services. It supports multiple translators and can handle placeholders in the text.
 
-## Features
+Features
+--------
 
-- Supports multiple translation services.
-- Handles placeholders in translation strings.
-- Concurrent translation for faster processing.
-- Customizable configuration for different translators.
-- Supports Odoo output format.
+-   Supports multiple translators including Google, Microsoft, Deepl, and more.
+-   Handles placeholders in the text to ensure they are not altered during translation.
+-   Can process individual files or entire folders.
+-   Supports custom configuration through a JSON file.
+-   Option to output in Odoo format.
 
-## Installation
+Installation
+------------
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/tickernelz/translator_po.git
-    cd translator_po
-    ```
+1.  Clone the repository:
 
-2. Create a virtual environment and activate it:
-    ```sh
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
+    `git clone https://github.com/tickernelz/translator_po.git
+    cd translator_po`
 
-3. Install the required dependencies:
-    ```sh
-    pip install -r requirements.txt
-    ```
+2.  Install the required dependencies:
 
-## Configuration
+    `pip install -r requirements.txt`
 
-Create a `config.json` file in the root directory of the project. You can use the default configuration provided in the code:
+3.  Install the package as a pip module:
 
-```json
-{
-    "translator": "GoogleTranslator",
-    "source_lang": "id",
-    "target_lang": "en",
-    "max_msgid_length": 300,
-    "DeeplTranslator": {"api_key": "", "use_free_api": true},
-    "QcriTranslator": {"api_key": ""},
-    "YandexTranslator": {"api_key": ""},
-    "MicrosoftTranslator": {"api_key": "", "region": ""},
-    "LibreTranslator": {"api_key": "", "use_free_api": true, "custom_url": ""},
-    "PapagoTranslator": {"client_id": "", "secret_key": ""},
-    "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
-    "BaiduTranslator": {"appid": "", "appkey": ""}
-}
-```
+    `pip install .`
 
 Usage
 -----
 
-### Command Line Interface
+### Command-Line Arguments
 
-You can use the command line interface to translate `.po` or `.pot` files.
+-   `-f`, `--file_path`: Path to the input `.po` or `.pot` file.
+-   `-d`, `--folder_path`: Path to the folder containing `.po` or `.pot` files.
+-   `-o`, `--output_folder`: Path to the output folder.
+-   `-c`, `--config_file`: Path to the configuration file (default: `config.json`).
+-   `-O`, `--odoo_output`: Enable Odoo output format.
 
-1.  Translate a single file:
+### Examples
 
-    `python main.py --file_path path/to/your/file.po output_folder path/to/output/folder config_file path/to/config.json`
+#### Translate a Single File
 
-2.  Translate all files in a folder:
+`translator_po -f path/to/your/file.po -o path/to/output/folder`
 
-    `python main.py --folder_path path/to/your/folder output_folder path/to/output/folder config_file path/to/config.json`
+#### Translate All Files in a Folder
 
-3.  Enable Odoo output format:
+`translator_po -d path/to/your/folder -o path/to/output/folder`
 
-    `python main.py --file_path path/to/your/file.po output_folder path/to/output/folder config_file path/to/config.json --odoo_output`
+#### Use a Custom Configuration File
 
-### Example
+`translator_po -f path/to/your/file.po -o path/to/output/folder -c path/to/config.json`
 
-`python main.py --file_path example.po output_folder translations config_file config.json`
+#### Enable Odoo Output Format
+
+`translator_po -f path/to/your/file.po -o path/to/output/folder -O`
+
+Configuration
+-------------
+
+The configuration file is a JSON file that specifies the translator settings. If the configuration file does not exist, a default configuration will be created in the home directory under `.translator_po`.
+
+### Default Configuration
+
+`{
+    "translator": "GoogleTranslator",
+    "source_lang": "id",
+    "target_lang": "en",
+    "max_msgid_length": 300,
+    "DeeplTranslator": {"api_key": "", "use_free_api": True},
+    "QcriTranslator": {"api_key": ""},
+    "YandexTranslator": {"api_key": ""},
+    "MicrosoftTranslator": {"api_key": "", "region": ""},
+    "LibreTranslator": {"api_key": "", "use_free_api": True, "custom_url": ""},
+    "PapagoTranslator": {"client_id": "", "secret_key": ""},
+    "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
+    "BaiduTranslator": {"appid": "", "appkey": ""}
+}`
 
 Logging
 -------
 
-The tool uses Python's built-in logging module to log information, warnings, and errors. Logs include timestamps for better traceability.
+The program uses logging to provide information about its progress and any errors that occur. Logs include timestamps and log levels for better readability.
 
 Contributing
 ------------
@@ -93,9 +99,7 @@ License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
 
-Acknowledgements
-----------------
+Contact
+-------
 
--   [polib](jetbrains://browser://https://github.com/izimobil/polib) for handling `.po` files.
--   [deep-translator](jetbrains://browser://https://github.com/nidhaloff/deep-translator) for providing multiple translation services.
--   [tqdm](jetbrains://browser://https://github.com/tqdm/tqdm) for progress bars.
+For any questions or suggestions, please open an issue or contact the maintainer.
