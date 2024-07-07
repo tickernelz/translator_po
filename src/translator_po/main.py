@@ -2,7 +2,6 @@ import argparse
 import concurrent.futures
 import json
 import logging
-import multiprocessing
 import os
 import re
 import site
@@ -147,7 +146,7 @@ class PoFileProcessor:
         if self.data:
             po = polib.pofile(self.data)
             entries = po.untranslated_entries()
-            num_cores = multiprocessing.cpu_count()
+            num_cores = os.cpu_count()
             chunk_size = len(entries) // num_cores
             chunks = [entries[i:i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
@@ -207,30 +206,15 @@ class MainController:
             for file_name in os.listdir(folder_path)
             if file_name.endswith('.po') or file_name.endswith('.pot')
         ]
-        nprocesses = multiprocessing.cpu_count()
-        queue = multiprocessing.JoinableQueue()
+        num_cores = os.cpu_count()
 
-        def worker():
-            while True:
-                args = queue.get()
-                if args is None:
-                    queue.task_done()
-                    break
-                self.process_file(*args)
-                queue.task_done()
-
-        processes = [multiprocessing.Process(target=worker) for _ in range(nprocesses)]
-
-        for proc in processes:
-            proc.start()
-
-        for file_path in files:
-            queue.put((file_path, output_folder, odoo_output))
-
-        for _ in range(nprocesses):
-            queue.put(None)
-
-        queue.join()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_cores) as executor:
+            futures = [executor.submit(self.process_file, file_path, output_folder, odoo_output) for file_path in files]
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logging.error(f"Error processing file: {e}")
 
     def run(self):
         if self.args.file_path:
@@ -250,7 +234,6 @@ def main():
     parser.add_argument('-O', '--odoo_output', action='store_true', help='Enable Odoo output format')
 
     args = parser.parse_args()
-    multiprocessing.set_start_method('fork', force=True)
 
     controller = MainController(args)
     controller.run()
