@@ -28,119 +28,100 @@ from tqdm import tqdm
 # Configure logging to include timestamps
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Map of translator names to their corresponding classes
-TRANSLATORS = {
-    "GoogleTranslator": GoogleTranslator,
-    "PonsTranslator": PonsTranslator,
-    "LingueeTranslator": LingueeTranslator,
-    "MyMemoryTranslator": MyMemoryTranslator,
-    "YandexTranslator": YandexTranslator,
-    "MicrosoftTranslator": MicrosoftTranslator,
-    "QcriTranslator": QcriTranslator,
-    "DeeplTranslator": DeeplTranslator,
-    "LibreTranslator": LibreTranslator,
-    "PapagoTranslator": PapagoTranslator,
-    "ChatGptTranslator": ChatGptTranslator,
-    "BaiduTranslator": BaiduTranslator,
-}
 
-DEFAULT_CONFIG = {
-    "translator": "GoogleTranslator",
-    "source_lang": "id",
-    "target_lang": "en",
-    "max_msgid_length": 300,
-    "DeeplTranslator": {"api_key": "", "use_free_api": True},
-    "QcriTranslator": {"api_key": ""},
-    "YandexTranslator": {"api_key": ""},
-    "MicrosoftTranslator": {"api_key": "", "region": ""},
-    "LibreTranslator": {"api_key": "", "use_free_api": True, "custom_url": ""},
-    "PapagoTranslator": {"client_id": "", "secret_key": ""},
-    "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
-    "BaiduTranslator": {"appid": "", "appkey": ""},
-}
+class ConfigHandler:
+    DEFAULT_CONFIG = {
+        "translator": "GoogleTranslator",
+        "source_lang": "id",
+        "target_lang": "en",
+        "max_msgid_length": 300,
+        "DeeplTranslator": {"api_key": "", "use_free_api": True},
+        "QcriTranslator": {"api_key": ""},
+        "YandexTranslator": {"api_key": ""},
+        "MicrosoftTranslator": {"api_key": "", "region": ""},
+        "LibreTranslator": {"api_key": "", "use_free_api": True, "custom_url": ""},
+        "PapagoTranslator": {"client_id": "", "secret_key": ""},
+        "ChatGptTranslator": {"api_key": "", "model": "gpt-3.5-turbo"},
+        "BaiduTranslator": {"appid": "", "appkey": ""},
+    }
+
+    def __init__(self, config_file):
+        self.config_file = config_file
+        self.config_dir = self._determine_config_dir()
+        self.config_path = os.path.join(self.config_dir, config_file)
+        self.config = self._load_config()
+
+    def _determine_config_dir(self):
+        if any(site_path in os.path.abspath(__file__) for site_path in site.getsitepackages()):
+            return os.path.join(os.path.expanduser("~"), ".translator_po")
+        else:
+            return os.path.dirname(os.path.abspath(__file__))
+
+    def _load_config(self):
+        os.makedirs(self.config_dir, exist_ok=True)
+        if not os.path.exists(self.config_path):
+            with open(self.config_path, 'w') as config_file:
+                json.dump(self.DEFAULT_CONFIG, config_file, indent=4)
+            logging.info(f"Configuration file not found. Created default config at {self.config_path}")
+
+        with open(self.config_path, 'r') as config_file:
+            return json.load(config_file)
 
 
-def update_metadata(po):
-    po.metadata['Last-Translator'] = 'Zahfron Adani Kautsar (tickernelz)'
-    po.metadata['Language-Team'] = 'Zahfron Adani Kautsar (tickernelz)'
+class TranslatorFactory:
+    TRANSLATORS = {
+        "GoogleTranslator": GoogleTranslator,
+        "PonsTranslator": PonsTranslator,
+        "LingueeTranslator": LingueeTranslator,
+        "MyMemoryTranslator": MyMemoryTranslator,
+        "YandexTranslator": YandexTranslator,
+        "MicrosoftTranslator": MicrosoftTranslator,
+        "QcriTranslator": QcriTranslator,
+        "DeeplTranslator": DeeplTranslator,
+        "LibreTranslator": LibreTranslator,
+        "PapagoTranslator": PapagoTranslator,
+        "ChatGptTranslator": ChatGptTranslator,
+        "BaiduTranslator": BaiduTranslator,
+    }
 
-
-class PoFileTranslator:
-    def __init__(self, data, config, file_name):
-        self.data = data
+    def __init__(self, config):
         self.config = config
-        self.file_name = file_name
-        self.translator_class = TRANSLATORS[config["translator"]]
-        self.source_lang = config["source_lang"]
-        self.target_lang = config["target_lang"]
-        self.max_msgid_length = config.get("max_msgid_length", 300)
-        self.translator_instance = self.create_translator_instance()
-        self.new_data = self.translate_po_file()
 
-    def create_translator_instance(self):
+    def get_translator_instance(self):
         translator_name = self.config["translator"]
-        translator_params = {
-            "DeeplTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "api_key": self.config["DeeplTranslator"]["api_key"],
-                "use_free_api": self.config["DeeplTranslator"]["use_free_api"],
-            },
-            "QcriTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "api_key": self.config["QcriTranslator"]["api_key"],
-            },
-            "YandexTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "api_key": self.config["YandexTranslator"]["api_key"],
-            },
-            "MicrosoftTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "api_key": self.config["MicrosoftTranslator"]["api_key"],
-                "region": self.config["MicrosoftTranslator"]["region"],
-            },
-            "LibreTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "api_key": self.config["LibreTranslator"]["api_key"],
-                "use_free_api": self.config["LibreTranslator"]["use_free_api"],
-                "custom_url": self.config["LibreTranslator"]["custom_url"],
-            },
-            "PapagoTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "client_id": self.config["PapagoTranslator"]["client_id"],
-                "secret_key": self.config["PapagoTranslator"]["secret_key"],
-            },
-            "ChatGptTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "api_key": self.config["ChatGptTranslator"]["api_key"],
-                "model": self.config["ChatGptTranslator"]["model"],
-            },
-            "BaiduTranslator": {
-                "source": self.source_lang,
-                "target": self.target_lang,
-                "appid": self.config["BaiduTranslator"]["appid"],
-                "appkey": self.config["BaiduTranslator"]["appkey"],
-            },
-        }
+        translator_class = self.TRANSLATORS[translator_name]
+        translator_params = self.config.get(translator_name, {})
+        translator_params.update({"source": self.config["source_lang"], "target": self.config["target_lang"]})
+        return translator_class(**translator_params)
 
-        params = translator_params.get(translator_name, {"source": self.source_lang, "target": self.target_lang})
-        return self.translator_class(**params)
 
-    def translate_entry(self, entry):
+class PoFileProcessor:
+    def __init__(self, file_path, config, output_folder, odoo_output=False):
+        self.file_path = file_path
+        self.config = config
+        self.output_folder = output_folder
+        self.odoo_output = odoo_output
+        self.file_name = os.path.basename(file_path)
+        self.data = self._read_file()
+        self.translator = TranslatorFactory(config).get_translator_instance()
+        self.new_data = None
+
+    def _read_file(self):
         try:
-            if len(entry.msgid) > self.max_msgid_length:
+            with open(self.file_path, 'r') as file:
+                return file.read()
+        except FileNotFoundError:
+            logging.error(f"File not found: {self.file_path}")
+        except Exception as e:
+            logging.error(f"Error reading file: {self.file_path}, Error: {e}")
+        return None
+
+    def _translate_entry(self, entry):
+        try:
+            if len(entry.msgid) > self.config.get("max_msgid_length", 300):
                 return entry
 
-            # Find all placeholders
             placeholders = re.findall(r'%\(\w+\)s|%\w|%%', entry.msgid)
-
-            # Replace placeholders with temporary markers
             temp_msgid = entry.msgid
             placeholder_map = {}
             for i, placeholder in enumerate(placeholders):
@@ -148,10 +129,8 @@ class PoFileTranslator:
                 temp_msgid = temp_msgid.replace(placeholder, placeholder_marker)
                 placeholder_map[placeholder_marker] = placeholder
 
-            # Translate the text without placeholders
-            translated_text = self.translator_instance.translate(temp_msgid)
+            translated_text = self.translator.translate(temp_msgid)
 
-            # Restore placeholders in the translated text
             for placeholder_marker, placeholder in placeholder_map.items():
                 translated_text = translated_text.replace(placeholder_marker, placeholder)
 
@@ -161,103 +140,105 @@ class PoFileTranslator:
             logging.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
             return entry
 
-    def translate_entries_chunk(self, entries_chunk):
-        return [self.translate_entry(entry) for entry in entries_chunk]
+    def _translate_entries_chunk(self, entries_chunk):
+        return [self._translate_entry(entry) for entry in entries_chunk]
 
     def translate_po_file(self):
         if self.data:
             po = polib.pofile(self.data)
             entries = po.untranslated_entries()
-
-            # Determine the number of available CPU cores
             num_cores = multiprocessing.cpu_count()
-
-            # Split entries into chunks
             chunk_size = len(entries) // num_cores
-            chunks = [entries[i: i + chunk_size] for i in range(0, len(entries), chunk_size)]
+            chunks = [entries[i:i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
-            # Create a pool of workers
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
-                worker_func = partial(self.translate_entries_chunk)
+                worker_func = partial(self._translate_entries_chunk)
                 with tqdm(total=len(chunks), desc=f"Translating {self.file_name}") as pbar:
                     results = []
                     for result in executor.map(worker_func, chunks):
                         results.append(result)
                         pbar.update()
 
-            # Flatten the list of results
             translated_entries = [entry for sublist in results for entry in sublist]
-
-            # Update the po object with translated entries
             po.clear()
             po.extend(translated_entries)
-
             update_metadata(po)
-            return str(po)
+            self.new_data = str(po)
 
+    def write_output_file(self):
+        if not self.new_data:
+            return
 
-def process_file(file_path, output_folder, config, odoo_output=False):
-    try:
-        with open(file_path, 'r') as file:
-            data = file.read()
-    except FileNotFoundError:
-        logging.error(f"File not found: {file_path}")
-        return
-    except Exception as e:
-        logging.error(f"Error reading file: {file_path}, Error: {e}")
-        return
+        if self.odoo_output:
+            base_name = os.path.splitext(self.file_name)[0]
+            output_folder_path = os.path.join(self.output_folder, base_name, 'i18n')
+            output_file_name = f"{self.config['target_lang']}.po"
+        else:
+            output_file_name = os.path.splitext(self.file_name)[0] + f"_{self.config['target_lang']}.po"
+            output_folder_path = self.output_folder
 
-    file_name = os.path.basename(file_path)
-    translator = PoFileTranslator(data, config, file_name)
-
-    if odoo_output:
-        base_name = os.path.splitext(file_name)[0]
-        output_folder_path = os.path.join(output_folder, base_name, 'i18n')
         os.makedirs(output_folder_path, exist_ok=True)
-        output_file_name = f"{config['target_lang']}.po"
-    else:
-        output_file_name = os.path.splitext(file_name)[0] + f"_{config['target_lang']}.po"
-        output_folder_path = output_folder
+        output_file_path = os.path.join(output_folder_path, output_file_name)
 
-    output_file_path = os.path.join(output_folder_path, output_file_name)
+        try:
+            with open(output_file_path, "w") as file:
+                file.write(self.new_data)
+        except Exception as e:
+            logging.error(f"Error writing to file: {output_file_path}, Error: {e}")
 
-    try:
-        with open(output_file_path, "w") as file:
-            file.write(translator.new_data)
-    except Exception as e:
-        logging.error(f"Error writing to file: {output_file_path}, Error: {e}")
-
-
-def worker(task, queue):
-    while True:
-        args = queue.get()
-        if args is None:
-            queue.task_done()
-            break
-        task(*args)
-        queue.task_done()
+    def process(self):
+        self.translate_po_file()
+        self.write_output_file()
 
 
-def process_files_in_folder(folder_path, output_folder, config, odoo_output):
-    files = [
-        os.path.join(folder_path, file_name)
-        for file_name in os.listdir(folder_path)
-        if file_name.endswith('.po') or file_name.endswith('.pot')
-    ]
-    nprocesses = multiprocessing.cpu_count()
-    queue = multiprocessing.JoinableQueue()
+class MainController:
+    def __init__(self, args):
+        self.args = args
+        self.config_handler = ConfigHandler(args.config_file)
+        self.file_processors = []
 
-    for i in range(nprocesses):
-        p = multiprocessing.Process(target=worker, args=(process_file, queue))
-        p.start()
+    def process_file(self, file_path, output_folder, odoo_output):
+        processor = PoFileProcessor(file_path, self.config_handler.config, output_folder, odoo_output)
+        processor.process()
 
-    for file_path in files:
-        queue.put((file_path, output_folder, config, odoo_output))
+    def process_files_in_folder(self, folder_path, output_folder, odoo_output):
+        files = [
+            os.path.join(folder_path, file_name)
+            for file_name in os.listdir(folder_path)
+            if file_name.endswith('.po') or file_name.endswith('.pot')
+        ]
+        nprocesses = multiprocessing.cpu_count()
+        queue = multiprocessing.JoinableQueue()
 
-    for i in range(nprocesses):
-        queue.put(None)
+        def worker():
+            while True:
+                args = queue.get()
+                if args is None:
+                    queue.task_done()
+                    break
+                self.process_file(*args)
+                queue.task_done()
 
-    queue.join()
+        processes = [multiprocessing.Process(target=worker) for _ in range(nprocesses)]
+
+        for proc in processes:
+            proc.start()
+
+        for file_path in files:
+            queue.put((file_path, output_folder, odoo_output))
+
+        for _ in range(nprocesses):
+            queue.put(None)
+
+        queue.join()
+
+    def run(self):
+        if self.args.file_path:
+            self.process_file(self.args.file_path, self.args.output_folder, self.args.odoo_output)
+        elif self.args.folder_path:
+            self.process_files_in_folder(self.args.folder_path, self.args.output_folder, self.args.odoo_output)
+        else:
+            logging.error("Either --file_path or --folder_path must be provided.")
 
 
 def main():
@@ -269,37 +250,16 @@ def main():
     parser.add_argument('-O', '--odoo_output', action='store_true', help='Enable Odoo output format')
 
     args = parser.parse_args()
+    multiprocessing.set_start_method('fork', force=True)
 
-    # Determine the configuration file path
-    if any(site_path in os.path.abspath(__file__) for site_path in site.getsitepackages()):
-        # The program is installed as a module
-        config_dir = os.path.join(os.path.expanduser("~"), ".translator_po")
-    else:
-        # The program is not installed as a module
-        config_dir = os.path.dirname(os.path.abspath(__file__))
+    controller = MainController(args)
+    controller.run()
 
-    os.makedirs(config_dir, exist_ok=True)
-    config_file_path = os.path.join(config_dir, args.config_file)
 
-    # Check if the configuration file exists, if not create it with default settings
-    if not os.path.exists(config_file_path):
-        with open(config_file_path, 'w') as config_file:
-            json.dump(DEFAULT_CONFIG, config_file, indent=4)
-        logging.info(f"Configuration file not found. Created default config at {config_file_path}")
-
-    # Load configuration
-    with open(config_file_path, 'r') as config_file:
-        config = json.load(config_file)
-
-    if args.file_path:
-        process_file(args.file_path, args.output_folder, config, args.odoo_output)
-    elif args.folder_path:
-        process_files_in_folder(args.folder_path, args.output_folder, config, args.odoo_output)
-        logging.info("Translation complete.")
-    else:
-        logging.error("Either --file_path or --folder_path must be provided.")
+def update_metadata(po):
+    po.metadata['Last-Translator'] = 'Zahfron Adani Kautsar (tickernelz)'
+    po.metadata['Language-Team'] = 'Zahfron Adani Kautsar (tickernelz)'
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('fork', force=True)
     main()
