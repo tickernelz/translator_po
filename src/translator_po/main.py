@@ -152,11 +152,10 @@ class PoFileProcessor:
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
                 worker_func = partial(self._translate_entries_chunk)
-                results = []
                 with tqdm(total=len(chunks), desc=f"Translating {self.file_name}") as pbar:
-                    futures = {executor.submit(worker_func, chunk): chunk for chunk in chunks}
-                    for future in concurrent.futures.as_completed(futures):
-                        results.extend(future.result())
+                    results = []
+                    for result in executor.map(worker_func, chunks):
+                        results.append(result)
                         pbar.update()
 
             translated_entries = [entry for sublist in results for entry in sublist]
@@ -211,7 +210,11 @@ class MainController:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_cores) as executor:
             futures = [executor.submit(self.process_file, file_path, output_folder, odoo_output) for file_path in files]
-            concurrent.futures.wait(futures)
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logging.error(f"Error processing file: {e}")
 
     def run(self):
         if self.args.file_path:
