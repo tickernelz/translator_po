@@ -7,6 +7,7 @@ import re
 import site
 from functools import partial
 
+import colorlog
 import polib
 from deep_translator import (
     GoogleTranslator,
@@ -22,10 +23,35 @@ from deep_translator import (
     ChatGptTranslator,
     BaiduTranslator,
 )
+from termcolor import colored
 from tqdm import tqdm
 
-# Configure logging to include timestamps
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Setup colorlog
+handler = colorlog.StreamHandler()
+handler.setFormatter(
+    colorlog.ColoredFormatter(
+        '%(asctime)s - %(log_color)s%(levelname)s%(reset)s - Process %(process)d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        log_colors={
+            'DEBUG': 'cyan',
+            'INFO': 'green',
+            'WARNING': 'yellow',
+            'ERROR': 'red',
+            'CRITICAL': 'bold_red',
+        },
+    )
+)
+
+# Check if the root logger already has handlers configured
+logger = colorlog.getLogger()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+# Root logger configuration
+if not logger.hasHandlers():
+    # Configure logging to include timestamps and process id
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 
 class ConfigHandler:
@@ -48,6 +74,7 @@ class ConfigHandler:
         self.config_file = config_file
         self.config_dir = self._determine_config_dir()
         self.config_path = os.path.join(self.config_dir, config_file)
+        logger.info(f"Loading configuration from {self.config_path}")
         self.config = self._load_config()
 
     def _determine_config_dir(self):
@@ -61,10 +88,13 @@ class ConfigHandler:
         if not os.path.exists(self.config_path):
             with open(self.config_path, 'w') as config_file:
                 json.dump(self.DEFAULT_CONFIG, config_file, indent=4)
-            logging.info(f"Configuration file not found. Created default config at {self.config_path}")
+            logger.info(f"Configuration file not found. Created default config at {self.config_path}")
 
         with open(self.config_path, 'r') as config_file:
-            return json.load(config_file)
+            config = json.load(config_file)
+
+        logger.info(f"Using translator: {config['translator']}")
+        return config
 
 
 class TranslatorFactory:
@@ -110,9 +140,9 @@ class PoFileProcessor:
             with open(self.file_path, 'r') as file:
                 return file.read()
         except FileNotFoundError:
-            logging.error(f"File not found: {self.file_path}")
+            logger.error(f"File not found: {self.file_path}")
         except Exception as e:
-            logging.error(f"Error reading file: {self.file_path}, Error: {e}")
+            logger.error(f"Error reading file: {self.file_path}, Error: {e}")
         return None
 
     def _translate_entry(self, entry):
@@ -136,7 +166,7 @@ class PoFileProcessor:
             entry.msgstr = translated_text
             return entry
         except Exception as e:
-            logging.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
+            logger.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
             return entry
 
     def _translate_entries_chunk(self, entries_chunk):
@@ -148,11 +178,11 @@ class PoFileProcessor:
             entries = po.untranslated_entries()
             num_cores = os.cpu_count()
             chunk_size = len(entries) // num_cores
-            chunks = [entries[i:i + chunk_size] for i in range(0, len(entries), chunk_size)]
+            chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
                 worker_func = partial(self._translate_entries_chunk)
-                with tqdm(total=len(chunks), desc=f"Translating {self.file_name}") as pbar:
+                with tqdm(total=len(chunks), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
                     results = []
                     for result in executor.map(worker_func, chunks):
                         results.append(result)
@@ -182,8 +212,9 @@ class PoFileProcessor:
         try:
             with open(output_file_path, "w") as file:
                 file.write(self.new_data)
+            tqdm.write(colored(f"Output file written at: {output_file_path}", "cyan"))
         except Exception as e:
-            logging.error(f"Error writing to file: {output_file_path}, Error: {e}")
+            logger.error(f"Error writing to file: {output_file_path}, Error: {e}")
 
     def process(self):
         self.translate_po_file()
@@ -214,15 +245,17 @@ class MainController:
                 try:
                     future.result()
                 except Exception as e:
-                    logging.error(f"Error processing file: {e}")
+                    logger.error(f"Error processing file: {e}")
 
     def run(self):
         if self.args.file_path:
+            logger.info(f"Single file mode. Processing file: {self.args.file_path}")
             self.process_file(self.args.file_path, self.args.output_folder, self.args.odoo_output)
         elif self.args.folder_path:
+            logger.info(f"Folder mode. Processing files in folder: {self.args.folder_path}")
             self.process_files_in_folder(self.args.folder_path, self.args.output_folder, self.args.odoo_output)
         else:
-            logging.error("Either --file_path or --folder_path must be provided.")
+            logger.error("Either --file_path or --folder_path must be provided.")
 
 
 def main():
