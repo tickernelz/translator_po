@@ -9,6 +9,8 @@ setup(
         'polib==1.2.0',
         'deep-translator==1.11.4',
         'tqdm==4.66.1',
+        'colorlog==6.8.2',
+        'termcolor==2.4.0',
     ],
     author='Zahfron Adani Kautsar',
     author_email='zhafronadani@gmail.com',

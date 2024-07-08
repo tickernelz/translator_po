@@ -70,14 +70,19 @@ class ConfigHandler:
         "BaiduTranslator": {"appid": "", "appkey": ""},
     }
 
-    def __init__(self, config_file):
+    def __init__(self, config_file, cli_config_path=None):
         self.config_file = config_file
+        self.cli_config_path = cli_config_path
         self.config_dir = self._determine_config_dir()
         self.config_path = os.path.join(self.config_dir, config_file)
         logger.info(f"Loading configuration from {self.config_path}")
         self.config = self._load_config()
 
     def _determine_config_dir(self):
+        # Check if cli_config_path is provided and use it as the config directory if so
+        if self.cli_config_path:
+            return os.path.dirname(os.path.abspath(self.cli_config_path))
+
         if any(site_path in os.path.abspath(__file__) for site_path in site.getsitepackages()):
             return os.path.join(os.path.expanduser("~"), ".translator_po")
         else:
@@ -176,8 +181,8 @@ class PoFileProcessor:
         if self.data:
             po = polib.pofile(self.data)
             entries = po.untranslated_entries()
-            num_cores = os.cpu_count()
-            chunk_size = len(entries) // num_cores
+            num_cores = max(1, os.cpu_count())
+            chunk_size = max(1, len(entries) // num_cores)
             chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
@@ -212,7 +217,6 @@ class PoFileProcessor:
         try:
             with open(output_file_path, "w") as file:
                 file.write(self.new_data)
-            tqdm.write(colored(f"Output file written at: {output_file_path}", "cyan"))
         except Exception as e:
             logger.error(f"Error writing to file: {output_file_path}, Error: {e}")
 
@@ -224,7 +228,8 @@ class PoFileProcessor:
 class MainController:
     def __init__(self, args):
         self.args = args
-        self.config_handler = ConfigHandler(args.config_file)
+        cli_config_path = args.config_file if args.config_file else None
+        self.config_handler = ConfigHandler(args.config_file, cli_config_path)
         self.file_processors = []
 
     def process_file(self, file_path, output_folder, odoo_output):
