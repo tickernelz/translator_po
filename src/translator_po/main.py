@@ -5,6 +5,8 @@ import logging
 import os
 import re
 import site
+import signal
+import sys
 from functools import partial
 
 import colorlog
@@ -25,6 +27,20 @@ from deep_translator import (
 )
 from termcolor import colored
 from tqdm import tqdm
+
+# Set up signal handling
+shutdown_flag = False
+
+
+def signal_handler(signum, frame):
+    global shutdown_flag
+    shutdown_flag = True
+    logger.info("Received shutdown signal, terminating gracefully...")
+
+
+# Register the signal handler
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Setup colorlog
 handler = colorlog.StreamHandler()
@@ -79,7 +95,6 @@ class ConfigHandler:
         self.config = self._load_config()
 
     def _determine_config_dir(self):
-        # Check if cli_config_path is provided and use it as the config directory if so
         if self.cli_config_path:
             return os.path.dirname(os.path.abspath(self.cli_config_path))
 
@@ -176,9 +191,14 @@ class PoFileProcessor:
             return entry
 
     def _translate_entries_chunk(self, entries_chunk):
+        global shutdown_flag
+        if shutdown_flag:
+            logger.info("Shutting down translation due to interrupt signal.")
+            return []
         return [self._translate_entry(entry) for entry in entries_chunk]
 
     def translate_po_file(self):
+        global shutdown_flag
         if self.data:
             po = polib.pofile(self.data)
             entries = po.untranslated_entries()
@@ -190,14 +210,19 @@ class PoFileProcessor:
                 with tqdm(total=len(chunks), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
                     results = []
                     for result in executor.map(worker_func, chunks):
+                        if shutdown_flag:
+                            logger.info("Gracefully stopping execution.")
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            break
                         results.append(result)
                         pbar.update()
 
-            translated_entries = [entry for sublist in results for entry in sublist]
-            po.clear()
-            po.extend(translated_entries)
-            update_metadata(po)
-            self.new_data = str(po)
+            if not shutdown_flag:
+                translated_entries = [entry for sublist in results for entry in sublist]
+                po.clear()
+                po.extend(translated_entries)
+                update_metadata(po)
+                self.new_data = str(po)
 
     def write_output_file(self):
         if not self.new_data:
@@ -238,6 +263,7 @@ class MainController:
         processor.process()
 
     def process_files_in_folder(self, folder_path, output_folder, odoo_output):
+        global shutdown_flag
         files = [
             os.path.join(folder_path, file_name)
             for file_name in os.listdir(folder_path)
@@ -247,6 +273,10 @@ class MainController:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.jobs) as executor:
             futures = [executor.submit(self.process_file, file_path, output_folder, odoo_output) for file_path in files]
             for future in concurrent.futures.as_completed(futures):
+                if shutdown_flag:
+                    logger.info("Gracefully stopping file processing due to interrupt signal.")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
                 try:
                     future.result()
                 except Exception as e:
