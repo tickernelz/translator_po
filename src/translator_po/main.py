@@ -4,9 +4,8 @@ import json
 import logging
 import os
 import re
-import site
 import signal
-import sys
+import site
 from functools import partial
 
 import colorlog
@@ -30,6 +29,7 @@ from tqdm import tqdm
 
 # Set up signal handling
 shutdown_flag = False
+translation_error_flag = False
 
 
 def signal_handler(signum, frame):
@@ -167,6 +167,8 @@ class PoFileProcessor:
         return None
 
     def _translate_entry(self, entry):
+        global translation_error_flag
+
         try:
             if len(entry.msgid) > self.config.get("max_msgid_length", 300):
                 return entry
@@ -187,18 +189,28 @@ class PoFileProcessor:
             entry.msgstr = translated_text
             return entry
         except Exception as e:
-            logger.error(f"Translation error. The key could not be translated. Key: {entry.msgid}, Error: {e}")
-            return entry
+            translation_error_flag = True
+            logger.error(f"{self.file_name}: {e}")
+            raise
 
     def _translate_entries_chunk(self, entries_chunk):
-        global shutdown_flag
-        if shutdown_flag:
-            logger.info("Shutting down translation due to interrupt signal.")
+        global shutdown_flag, translation_error_flag
+
+        if shutdown_flag or translation_error_flag:
+            logger.info("Shutting down translation due to interrupt signal or translation error.")
             return []
-        return [self._translate_entry(entry) for entry in entries_chunk]
+
+        translated_entries = []
+        for entry in entries_chunk:
+            if translation_error_flag:
+                break
+
+            translated_entries.append(self._translate_entry(entry))
+
+        return translated_entries
 
     def translate_po_file(self):
-        global shutdown_flag
+        global shutdown_flag, translation_error_flag
         if self.data:
             po = polib.pofile(self.data)
             entries = po.untranslated_entries()
@@ -207,17 +219,26 @@ class PoFileProcessor:
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=self.jobs) as executor:
                 worker_func = partial(self._translate_entries_chunk)
+                results = []
                 with tqdm(total=len(chunks), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
-                    results = []
-                    for result in executor.map(worker_func, chunks):
-                        if shutdown_flag:
+                    future_to_chunk = {executor.submit(worker_func, chunk): chunk for chunk in chunks}
+                    for future in concurrent.futures.as_completed(future_to_chunk):
+                        if shutdown_flag or translation_error_flag:
                             logger.info("Gracefully stopping execution.")
                             executor.shutdown(wait=False, cancel_futures=True)
                             break
-                        results.append(result)
-                        pbar.update()
 
-            if not shutdown_flag:
+                        try:
+                            result = future.result()
+                            results.append(result)
+                            pbar.update()
+                        except Exception as e:
+                            logger.error(f"Translation error for file {self.file_name}: {e}")
+                            translation_error_flag = True
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            break
+
+            if not shutdown_flag and not translation_error_flag:
                 translated_entries = [entry for sublist in results for entry in sublist]
                 po.clear()
                 po.extend(translated_entries)
@@ -263,7 +284,7 @@ class MainController:
         processor.process()
 
     def process_files_in_folder(self, folder_path, output_folder, odoo_output):
-        global shutdown_flag
+        global shutdown_flag, translation_error_flag
         files = [
             os.path.join(folder_path, file_name)
             for file_name in os.listdir(folder_path)
@@ -273,10 +294,11 @@ class MainController:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.jobs) as executor:
             futures = [executor.submit(self.process_file, file_path, output_folder, odoo_output) for file_path in files]
             for future in concurrent.futures.as_completed(futures):
-                if shutdown_flag:
-                    logger.info("Gracefully stopping file processing due to interrupt signal.")
+                if shutdown_flag or translation_error_flag:
+                    logger.info("Gracefully stopping file processing due to interrupt signal or translation error.")
                     executor.shutdown(wait=False, cancel_futures=True)
                     break
+
                 try:
                     future.result()
                 except Exception as e:
