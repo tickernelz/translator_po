@@ -49,6 +49,7 @@ Usage
 - `-o`, `--output_folder`: Path to the output folder.
 - `-c`, `--config_file`: Path to the configuration file (default: `config.json`).
 - `-O`, `--odoo_output`: Enable Odoo output format.
+- `-j`, `--jobs`: Number of concurrent jobs/threads.
 
 ### Examples
 

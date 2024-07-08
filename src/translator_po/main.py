@@ -130,11 +130,12 @@ class TranslatorFactory:
 
 
 class PoFileProcessor:
-    def __init__(self, file_path, config, output_folder, odoo_output=False):
+    def __init__(self, file_path, config, output_folder, odoo_output=False, jobs=max(1, os.cpu_count())):
         self.file_path = file_path
         self.config = config
         self.output_folder = output_folder
         self.odoo_output = odoo_output
+        self.jobs = jobs
         self.file_name = os.path.basename(file_path)
         self.data = self._read_file()
         self.translator = TranslatorFactory(config).get_translator_instance()
@@ -181,11 +182,10 @@ class PoFileProcessor:
         if self.data:
             po = polib.pofile(self.data)
             entries = po.untranslated_entries()
-            num_cores = max(1, os.cpu_count())
-            chunk_size = max(1, len(entries) // num_cores)
+            chunk_size = max(1, len(entries) // self.jobs)
             chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_cores) as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=self.jobs) as executor:
                 worker_func = partial(self._translate_entries_chunk)
                 with tqdm(total=len(chunks), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
                     results = []
@@ -230,10 +230,11 @@ class MainController:
         self.args = args
         cli_config_path = args.config_file if args.config_file else None
         self.config_handler = ConfigHandler(args.config_file, cli_config_path)
+        self.jobs = args.jobs
         self.file_processors = []
 
     def process_file(self, file_path, output_folder, odoo_output):
-        processor = PoFileProcessor(file_path, self.config_handler.config, output_folder, odoo_output)
+        processor = PoFileProcessor(file_path, self.config_handler.config, output_folder, odoo_output, self.jobs)
         processor.process()
 
     def process_files_in_folder(self, folder_path, output_folder, odoo_output):
@@ -242,9 +243,8 @@ class MainController:
             for file_name in os.listdir(folder_path)
             if file_name.endswith('.po') or file_name.endswith('.pot')
         ]
-        num_cores = os.cpu_count()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=num_cores) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.jobs) as executor:
             futures = [executor.submit(self.process_file, file_path, output_folder, odoo_output) for file_path in files]
             for future in concurrent.futures.as_completed(futures):
                 try:
@@ -270,6 +270,7 @@ def main():
     parser.add_argument('-o', '--output_folder', type=str, help='Path to the output folder')
     parser.add_argument('-c', '--config_file', type=str, default='config.json', help='Path to the configuration file')
     parser.add_argument('-O', '--odoo_output', action='store_true', help='Enable Odoo output format')
+    parser.add_argument('-j', '--jobs', type=int, default=os.cpu_count(), help='Number of concurrent jobs/threads')
 
     args = parser.parse_args()
 
