@@ -219,7 +219,7 @@ class PoFileProcessor:
             chunk_size = max(1, len(entries) // self.jobs)
             chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
-            with concurrent.futures.ProcessPoolExecutor(max_workers=self.jobs) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.jobs) as executor:
                 worker_func = partial(self._translate_entries_chunk)
                 results = []
                 with tqdm(total=len(entries), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
@@ -361,18 +361,15 @@ class MainController:
             if file_name.endswith('.po') or file_name.endswith('.pot')
         ]
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.jobs) as executor:
-            futures = [executor.submit(self.process_file, file_path, output_folder, odoo_output) for file_path in files]
-            for future in concurrent.futures.as_completed(futures):
-                if shutdown_flag or translation_error_flag:
-                    logger.info("Gracefully stopping file processing due to interrupt signal or translation error.")
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    break
+        for file_path in files:
+            if shutdown_flag or translation_error_flag:
+                logger.info("Gracefully stopping file processing due to interrupt signal or translation error.")
+                break
 
-                try:
-                    future.result()
-                except Exception as e:
-                    logger.error(f"Error processing file: {e}")
+            try:
+                self.process_file(file_path, output_folder, odoo_output)
+            except Exception as e:
+                logger.error(f"Error processing file: {e}")
 
     def run(self):
         if self.args.split:
