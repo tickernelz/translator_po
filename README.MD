@@ -52,6 +52,7 @@ Usage
 - `-c`, `--config_file`: Path to the configuration file (default: `config.json`).
 - `-O`, `--odoo_output`: Enable Odoo output format.
 - `-j`, `--jobs`: Number of concurrent jobs/threads (default: number of CPU cores).
+- `-F`, `--force`: Force processing even if output file already exists.
 - `-s`, `--split`: Path to the input `.po` file to split.
 - `-ns`, `--num_split`: Number of parts to split the `.po` file into.
 - `-os`, `--output_split`: Path to the output folder for split files.

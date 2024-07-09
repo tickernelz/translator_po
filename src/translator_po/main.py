@@ -146,12 +146,13 @@ class TranslatorFactory:
 
 
 class PoFileProcessor:
-    def __init__(self, file_path, config, output_folder, odoo_output=False, jobs=max(1, os.cpu_count())):
+    def __init__(self, file_path, config, output_folder, odoo_output=False, jobs=max(1, os.cpu_count()), force=False):
         self.file_path = file_path
         self.config = config
         self.output_folder = output_folder
         self.odoo_output = odoo_output
         self.jobs = jobs
+        self.force = force
         self.file_name = os.path.basename(file_path)
         self.data = self._read_file()
         self.translator = TranslatorFactory(config).get_translator_instance()
@@ -268,6 +269,20 @@ class PoFileProcessor:
             logger.error(f"Error writing to file: {output_file_path}, Error: {e}")
 
     def process(self):
+        if self.odoo_output:
+            base_name = os.path.splitext(self.file_name)[0]
+            output_folder_path = os.path.join(self.output_folder, base_name, 'i18n')
+            output_file_name = f"{self.config['target_lang']}.po"
+        else:
+            output_file_name = os.path.splitext(self.file_name)[0] + f"_{self.config['target_lang']}.po"
+            output_folder_path = self.output_folder
+
+        output_file_path = os.path.join(output_folder_path, output_file_name)
+
+        if not self.force and os.path.exists(output_file_path):
+            logger.info(f"File {output_file_path} already exists. Skipping translation.")
+            return
+
         self.translate_po_file()
         self.write_output_file()
 
@@ -329,10 +344,13 @@ class MainController:
         cli_config_path = args.config_file if args.config_file else None
         self.config_handler = ConfigHandler(args.config_file, cli_config_path)
         self.jobs = args.jobs
+        self.force = args.force
         self.file_processors = []
 
     def process_file(self, file_path, output_folder, odoo_output):
-        processor = PoFileProcessor(file_path, self.config_handler.config, output_folder, odoo_output, self.jobs)
+        processor = PoFileProcessor(
+            file_path, self.config_handler.config, output_folder, odoo_output, self.jobs, self.force
+        )
         processor.process()
 
     def process_files_in_folder(self, folder_path, output_folder, odoo_output):
@@ -394,6 +412,9 @@ def main():
     parser.add_argument('-os', '--output_split', type=str, help='Path to the output folder for split files')
     parser.add_argument('-m', '--merge', type=str, help='Path to the folder containing .po files to merge')
     parser.add_argument('-om', '--output_merge', type=str, help='Path to the output merged .po file')
+    parser.add_argument(
+        '-F', '--force', action='store_true', help='Force processing even if output file already exists'
+    )
 
     args = parser.parse_args()
 
