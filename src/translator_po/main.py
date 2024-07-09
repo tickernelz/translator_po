@@ -35,7 +35,8 @@ translation_error_flag = False
 def signal_handler(signum, frame):
     global shutdown_flag
     shutdown_flag = True
-    logger.info("Received shutdown signal, terminating gracefully...")
+    logger.info("Received shutdown signal, terminating forcefully...")
+    os._exit(1)  # Forcefully exit the program
 
 
 # Register the signal handler
@@ -220,7 +221,7 @@ class PoFileProcessor:
             with concurrent.futures.ProcessPoolExecutor(max_workers=self.jobs) as executor:
                 worker_func = partial(self._translate_entries_chunk)
                 results = []
-                with tqdm(total=len(chunks), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
+                with tqdm(total=len(entries), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:  # Ubah total menjadi len(entries)
                     future_to_chunk = {executor.submit(worker_func, chunk): chunk for chunk in chunks}
                     for future in concurrent.futures.as_completed(future_to_chunk):
                         if shutdown_flag or translation_error_flag:
@@ -231,7 +232,7 @@ class PoFileProcessor:
                         try:
                             result = future.result()
                             results.append(result)
-                            pbar.update()
+                            pbar.update(len(future_to_chunk[future]))  # Update progress bar dengan jumlah entries dalam chunk
                         except Exception as e:
                             logger.error(f"Translation error for file {self.file_name}: {e}")
                             translation_error_flag = True
