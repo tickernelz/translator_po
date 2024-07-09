@@ -14,6 +14,8 @@ Features
 - Option to output in Odoo format.
 - Uses `tqdm` for progress reporting.
 - Supports multiprocessing for faster translation.
+- Split `.po` files into multiple parts.
+- Merge multiple `.po` files into a single file.
 
 Installation
 ------------
@@ -49,7 +51,12 @@ Usage
 - `-o`, `--output_folder`: Path to the output folder.
 - `-c`, `--config_file`: Path to the configuration file (default: `config.json`).
 - `-O`, `--odoo_output`: Enable Odoo output format.
-- `-j`, `--jobs`: Number of concurrent jobs/threads.
+- `-j`, `--jobs`: Number of concurrent jobs/threads (default: number of CPU cores).
+- `-s`, `--split`: Path to the input `.po` file to split.
+- `-ns`, `--num_split`: Number of parts to split the `.po` file into.
+- `-os`, `--output_split`: Path to the output folder for split files.
+- `-m`, `--merge`: Path to the folder containing `.po` files to merge.
+- `-om`, `--output_merge`: Path to the output merged `.po` file.
 
 ### Examples
 
@@ -75,6 +82,18 @@ translator_po -f path/to/your/file.po -o path/to/output/folder -c path/to/config
 
 ```console
 translator_po -f path/to/your/file.po -o path/to/output/folder -O
+```
+
+#### Split a `.po` File into Multiple Parts
+
+```console
+translator_po -s path/to/your/file.po -ns 5 -os path/to/output/folder
+```
+
+#### Merge Multiple `.po` Files into a Single File
+
+```console
+translator_po -m path/to/your/folder -om path/to/output/merged_file.po
 ```
 
 Configuration

@@ -221,7 +221,7 @@ class PoFileProcessor:
             with concurrent.futures.ProcessPoolExecutor(max_workers=self.jobs) as executor:
                 worker_func = partial(self._translate_entries_chunk)
                 results = []
-                with tqdm(total=len(entries), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:  # Ubah total menjadi len(entries)
+                with tqdm(total=len(entries), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
                     future_to_chunk = {executor.submit(worker_func, chunk): chunk for chunk in chunks}
                     for future in concurrent.futures.as_completed(future_to_chunk):
                         if shutdown_flag or translation_error_flag:
@@ -232,7 +232,7 @@ class PoFileProcessor:
                         try:
                             result = future.result()
                             results.append(result)
-                            pbar.update(len(future_to_chunk[future]))  # Update progress bar dengan jumlah entries dalam chunk
+                            pbar.update(len(future_to_chunk[future]))
                         except Exception as e:
                             logger.error(f"Translation error for file {self.file_name}: {e}")
                             translation_error_flag = True
@@ -272,6 +272,57 @@ class PoFileProcessor:
         self.write_output_file()
 
 
+class PoFileSplitter:
+    def __init__(self, file_path, num_split, output_folder):
+        self.file_path = file_path
+        self.num_split = num_split
+        self.output_folder = output_folder
+        self.file_name = os.path.basename(file_path)
+        self.data = self._read_file()
+
+    def _read_file(self):
+        try:
+            with open(self.file_path, 'r') as file:
+                return file.read()
+        except FileNotFoundError:
+            logger.error(f"File not found: {self.file_path}")
+        except Exception as e:
+            logger.error(f"Error reading file: {self.file_path}, Error: {e}")
+        return None
+
+    def split_po_file(self):
+        if self.data:
+            po = polib.pofile(self.data)
+            entries = po.untranslated_entries()
+            chunk_size = max(1, len(entries) // self.num_split)
+            chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
+
+            for i, chunk in enumerate(chunks):
+                split_po = polib.POFile()
+                split_po.extend(chunk)
+                output_file_name = os.path.splitext(self.file_name)[0] + f"_part_{i + 1}.po"
+                output_file_path = os.path.join(self.output_folder, output_file_name)
+                os.makedirs(self.output_folder, exist_ok=True)
+                split_po.save(output_file_path)
+                logger.info(f"Saved split file: {output_file_path}")
+
+
+class PoFileMerger:
+    def __init__(self, folder_path, output_file):
+        self.folder_path = folder_path
+        self.output_file = output_file
+
+    def merge_po_files(self):
+        merged_po = polib.POFile()
+        for file_name in os.listdir(self.folder_path):
+            if file_name.endswith('.po'):
+                file_path = os.path.join(self.folder_path, file_name)
+                po = polib.pofile(file_path)
+                merged_po.extend(po)
+        merged_po.save(self.output_file)
+        logger.info(f"Merged file saved: {self.output_file}")
+
+
 class MainController:
     def __init__(self, args):
         self.args = args
@@ -306,14 +357,28 @@ class MainController:
                     logger.error(f"Error processing file: {e}")
 
     def run(self):
-        if self.args.file_path:
+        if self.args.split:
+            if not self.args.num_split or not self.args.output_split:
+                logger.error("Parameters --num_split and --output_split are required for splitting.")
+                return
+            logger.info(f"Splitting file: {self.args.split} into {self.args.num_split} parts")
+            splitter = PoFileSplitter(self.args.split, self.args.num_split, self.args.output_split)
+            splitter.split_po_file()
+        elif self.args.merge:
+            if not self.args.output_merge:
+                logger.error("Parameter --output_merge is required for merging.")
+                return
+            logger.info(f"Merging files in folder: {self.args.merge} into {self.args.output_merge}")
+            merger = PoFileMerger(self.args.merge, self.args.output_merge)
+            merger.merge_po_files()
+        elif self.args.file_path:
             logger.info(f"Single file mode. Processing file: {self.args.file_path}")
             self.process_file(self.args.file_path, self.args.output_folder, self.args.odoo_output)
         elif self.args.folder_path:
             logger.info(f"Folder mode. Processing files in folder: {self.args.folder_path}")
             self.process_files_in_folder(self.args.folder_path, self.args.output_folder, self.args.odoo_output)
         else:
-            logger.error("Either --file_path or --folder_path must be provided.")
+            logger.error("Either --file_path, --folder_path, --split, or --merge must be provided.")
 
 
 def main():
@@ -324,6 +389,11 @@ def main():
     parser.add_argument('-c', '--config_file', type=str, default='config.json', help='Path to the configuration file')
     parser.add_argument('-O', '--odoo_output', action='store_true', help='Enable Odoo output format')
     parser.add_argument('-j', '--jobs', type=int, default=os.cpu_count(), help='Number of concurrent jobs/threads')
+    parser.add_argument('-s', '--split', type=str, help='Path to the input .po file to split')
+    parser.add_argument('-ns', '--num_split', type=int, help='Number of parts to split the .po file into')
+    parser.add_argument('-os', '--output_split', type=str, help='Path to the output folder for split files')
+    parser.add_argument('-m', '--merge', type=str, help='Path to the folder containing .po files to merge')
+    parser.add_argument('-om', '--output_merge', type=str, help='Path to the output merged .po file')
 
     args = parser.parse_args()
 
