@@ -4,6 +4,8 @@ import os
 import polib
 
 logger = logging.getLogger(__name__)
+
+
 class PoFileSplitter:
     def __init__(self, file_path, num_split, output_folder):
         self.file_path = file_path

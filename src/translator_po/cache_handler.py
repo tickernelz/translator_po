@@ -5,6 +5,8 @@ import sqlite3
 from threading import local
 
 logger = logging.getLogger(__name__)
+
+
 class CacheHandler:
     MAX_CACHE_SIZE = 1 * 1024 * 1024  # 1MB
 

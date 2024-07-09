@@ -4,6 +4,8 @@ import os
 import site
 
 logger = logging.getLogger(__name__)
+
+
 class ConfigHandler:
     DEFAULT_CONFIG = {
         "translator": "GoogleTranslator",

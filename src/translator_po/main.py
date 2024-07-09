@@ -13,11 +13,15 @@ from .po_file_splitter import PoFileSplitter
 # Set up signal handling
 shutdown_flag = False
 translation_error_flag = False
+
+
 def signal_handler(signum, frame):
     global shutdown_flag
     shutdown_flag = True
     logger.info("Received shutdown signal, terminating forcefully...")
     os._exit(1)  # Forcefully exit the program
+
+
 # Register the signal handler
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
@@ -48,6 +52,8 @@ if not logger.hasHandlers():
     # Configure logging to include timestamps and process id
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+
+
 class MainController:
     def __init__(self, args):
         self.args = args
@@ -107,6 +113,8 @@ class MainController:
             self.process_files_in_folder(self.args.folder_path, self.args.output_folder, self.args.odoo_output)
         else:
             logger.error("Either --file_path, --folder_path, --split, or --merge must be provided.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Translate .po and .pot files.")
     parser.add_argument('-f', '--file_path', type=str, help='Path to the input .po or .pot file')
@@ -129,5 +137,7 @@ def main():
 
     controller = MainController(args)
     controller.run()
+
+
 if __name__ == "__main__":
     main()

@@ -1,7 +1,9 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
-    name='translator_po',    version = ('0.3.1',)packages=find_packages(where='src'),
+    name='translator_po',
+    version='0.3.2',
+    packages=find_packages(where='src'),
     package_dir={'': 'src'},
     install_requires=[
         'polib==1.2.0',
@@ -13,7 +15,7 @@ setup(
     author='Zahfron Adani Kautsar',
     author_email='zhafronadani@gmail.com',
     description='This project is a command-line tool for translating `.po` and `.pot` files using various translation '
-                'services. It supports multiple translators and can handle placeholders in the text.',
+    'services. It supports multiple translators and can handle placeholders in the text.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/tickernelz/translator_po',

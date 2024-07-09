@@ -12,6 +12,8 @@ from deep_translator import (
     ChatGptTranslator,
     BaiduTranslator,
 )
+
+
 class TranslatorFactory:
     TRANSLATORS = {
         "GoogleTranslator": GoogleTranslator,

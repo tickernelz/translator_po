@@ -4,6 +4,8 @@ import os
 import polib
 
 logger = logging.getLogger(__name__)
+
+
 class PoFileMerger:
     def __init__(self, folder_path, output_file):
         self.folder_path = folder_path

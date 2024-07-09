@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 # Define global flags
 shutdown_flag = False
 translation_error_flag = False
+
+
 class PoFileProcessor:
     def __init__(
         self,
