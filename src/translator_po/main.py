@@ -342,7 +342,7 @@ class MainController:
     def __init__(self, args):
         self.args = args
         cli_config_path = args.config_file if args.config_file else None
-        self.config_handler = ConfigHandler(args.config_file, cli_config_path)
+        self.config_handler = ConfigHandler(args.config_file or 'config.json', cli_config_path)
         self.jobs = args.jobs
         self.force = args.force
         self.file_processors = []
@@ -401,7 +401,7 @@ def main():
     parser.add_argument('-f', '--file_path', type=str, help='Path to the input .po or .pot file')
     parser.add_argument('-d', '--folder_path', type=str, help='Path to the folder containing .po or .pot files')
     parser.add_argument('-o', '--output_folder', type=str, help='Path to the output folder')
-    parser.add_argument('-c', '--config_file', type=str, default='config.json', help='Path to the configuration file')
+    parser.add_argument('-c', '--config_file', type=str, help='Path to the configuration file')
     parser.add_argument('-O', '--odoo_output', action='store_true', help='Enable Odoo output format')
     parser.add_argument('-j', '--jobs', type=int, default=os.cpu_count(), help='Number of concurrent jobs/threads')
     parser.add_argument('-s', '--split', type=str, help='Path to the input .po file to split')
