@@ -16,6 +16,7 @@ Features
 - Supports multiprocessing for faster translation.
 - Split `.po` files into multiple parts.
 - Merge multiple `.po` files into a single file.
+- Supports caching
 
 Installation
 ------------
@@ -58,6 +59,7 @@ Usage
 - `-os`, `--output_split`: Path to the output folder for split files.
 - `-m`, `--merge`: Path to the folder containing `.po` files to merge.
 - `-om`, `--output_merge`: Path to the output merged `.po` file.
+- `-nc`, `--no_cache`: Disable caching of translations.
 
 ### Examples
 

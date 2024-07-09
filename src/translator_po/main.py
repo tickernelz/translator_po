@@ -6,7 +6,10 @@ import os
 import re
 import signal
 import site
+import sqlite3
+import hashlib
 from functools import partial
+from threading import local
 
 import colorlog
 import polib
@@ -118,6 +121,83 @@ class ConfigHandler:
         return config
 
 
+class CacheHandler:
+    MAX_CACHE_SIZE = 1 * 1024 * 1024  # 4MB
+
+    def __init__(self, cache_dir):
+        self.cache_dir = cache_dir
+        self.local = local()
+        self._initialize_cache()
+
+    def _initialize_cache(self):
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self._open_new_cache_file()
+
+    def _open_new_cache_file(self):
+        cache_files = sorted(
+            [f for f in os.listdir(self.cache_dir) if f.startswith('cache_') and f.endswith('.db')],
+            key=lambda x: int(x.split('_')[1].split('.')[0]),
+        )
+        if cache_files:
+            last_cache_file = cache_files[-1]
+            self.db_path = os.path.join(self.cache_dir, last_cache_file)
+            if os.path.getsize(self.db_path) >= self.MAX_CACHE_SIZE:
+                new_cache_index = int(last_cache_file.split('_')[1].split('.')[0]) + 1
+                self.db_path = os.path.join(self.cache_dir, f'cache_{new_cache_index}.db')
+        else:
+            self.db_path = os.path.join(self.cache_dir, 'cache_0.db')
+
+    def _get_connection(self):
+        if not hasattr(self.local, 'conn'):
+            self.local.conn = sqlite3.connect(self.db_path)
+            self.local.cursor = self.local.conn.cursor()
+            self.local.cursor.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS translations (
+                    id TEXT PRIMARY KEY,
+                    source_lang TEXT,
+                    target_lang TEXT,
+                    translator TEXT,
+                    source_text TEXT,
+                    translated_text TEXT
+                )
+            '''
+            )
+            self.local.conn.commit()
+        return self.local.conn, self.local.cursor
+
+    def _generate_cache_key(self, source_lang, target_lang, translator, source_text):
+        key = f"{source_lang}:{target_lang}:{translator}:{source_text}"
+        return hashlib.md5(key.encode('utf-8')).hexdigest()
+
+    def get_translation(self, source_lang, target_lang, translator, source_text):
+        conn, cursor = self._get_connection()
+        cache_key = self._generate_cache_key(source_lang, target_lang, translator, source_text)
+        cursor.execute(
+            '''
+            SELECT translated_text FROM translations WHERE id = ?
+        ''',
+            (cache_key,),
+        )
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+    def save_translation(self, source_lang, target_lang, translator, source_text, translated_text):
+        conn, cursor = self._get_connection()
+        cache_key = self._generate_cache_key(source_lang, target_lang, translator, source_text)
+        cursor.execute(
+            '''
+            INSERT OR REPLACE INTO translations (id, source_lang, target_lang, translator, source_text, translated_text)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''',
+            (cache_key, source_lang, target_lang, translator, source_text, translated_text),
+        )
+        conn.commit()
+        if os.path.getsize(self.db_path) >= self.MAX_CACHE_SIZE:
+            self._open_new_cache_file()
+            self.local.conn = None  # Force new connection in next call
+
+
 class TranslatorFactory:
     TRANSLATORS = {
         "GoogleTranslator": GoogleTranslator,
@@ -146,16 +226,29 @@ class TranslatorFactory:
 
 
 class PoFileProcessor:
-    def __init__(self, file_path, config, output_folder, odoo_output=False, jobs=max(1, os.cpu_count()), force=False):
+    def __init__(
+        self,
+        file_path,
+        config,
+        output_folder,
+        odoo_output=False,
+        jobs=max(1, os.cpu_count()),
+        force=False,
+        no_cache=False,
+    ):
         self.file_path = file_path
         self.config = config
         self.output_folder = output_folder
         self.odoo_output = odoo_output
         self.jobs = jobs
         self.force = force
+        self.no_cache = no_cache
         self.file_name = os.path.basename(file_path)
         self.data = self._read_file()
         self.translator = TranslatorFactory(config).get_translator_instance()
+        self.cache_handler = (
+            CacheHandler(os.path.join(os.path.expanduser("~"), ".translator_po", ".cache")) if not no_cache else None
+        )
         self.new_data = None
 
     def _read_file(self):
@@ -183,7 +276,23 @@ class PoFileProcessor:
                 temp_msgid = temp_msgid.replace(placeholder, placeholder_marker)
                 placeholder_map[placeholder_marker] = placeholder
 
-            translated_text = self.translator.translate(temp_msgid)
+            if self.cache_handler:
+                cached_translation = self.cache_handler.get_translation(
+                    self.config["source_lang"], self.config["target_lang"], self.config["translator"], temp_msgid
+                )
+                if cached_translation:
+                    translated_text = cached_translation
+                else:
+                    translated_text = self.translator.translate(temp_msgid)
+                    self.cache_handler.save_translation(
+                        self.config["source_lang"],
+                        self.config["target_lang"],
+                        self.config["translator"],
+                        temp_msgid,
+                        translated_text,
+                    )
+            else:
+                translated_text = self.translator.translate(temp_msgid)
 
             for placeholder_marker, placeholder in placeholder_map.items():
                 translated_text = translated_text.replace(placeholder_marker, placeholder)
@@ -345,21 +454,24 @@ class MainController:
         self.config_handler = ConfigHandler(args.config_file or 'config.json', cli_config_path)
         self.jobs = args.jobs
         self.force = args.force
+        self.no_cache = args.no_cache
         self.file_processors = []
 
     def process_file(self, file_path, output_folder, odoo_output):
         processor = PoFileProcessor(
-            file_path, self.config_handler.config, output_folder, odoo_output, self.jobs, self.force
+            file_path, self.config_handler.config, output_folder, odoo_output, self.jobs, self.force, self.no_cache
         )
         processor.process()
 
     def process_files_in_folder(self, folder_path, output_folder, odoo_output):
         global shutdown_flag, translation_error_flag
-        files = [
-            os.path.join(folder_path, file_name)
-            for file_name in os.listdir(folder_path)
-            if file_name.endswith('.po') or file_name.endswith('.pot')
-        ]
+        files = sorted(
+            [
+                os.path.join(folder_path, file_name)
+                for file_name in os.listdir(folder_path)
+                if file_name.endswith('.po') or file_name.endswith('.pot')
+            ]
+        )
 
         for file_path in files:
             if shutdown_flag or translation_error_flag:
@@ -412,6 +524,7 @@ def main():
     parser.add_argument(
         '-F', '--force', action='store_true', help='Force processing even if output file already exists'
     )
+    parser.add_argument('-nc', '--no_cache', action='store_true', help='Disable caching of translations')
 
     args = parser.parse_args()
 
