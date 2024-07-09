@@ -1,9 +1,7 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
-    name='translator_po',
-    version='0.3.0',
-    packages=find_packages(where='src'),
+    name='translator_po',    version = ('0.3.1',)packages=find_packages(where='src'),
     package_dir={'': 'src'},
     install_requires=[
         'polib==1.2.0',

@@ -6,7 +6,7 @@ from threading import local
 
 logger = logging.getLogger(__name__)
 class CacheHandler:
-    MAX_CACHE_SIZE = 1 * 1024 * 1024  # 4MB
+    MAX_CACHE_SIZE = 1 * 1024 * 1024  # 1MB
 
     def __init__(self, cache_dir):
         self.cache_dir = cache_dir
@@ -55,20 +55,30 @@ class CacheHandler:
         return hashlib.md5(key.encode('utf-8')).hexdigest()
 
     def get_translation(self, source_lang, target_lang, translator, source_text):
-        conn, cursor = self._get_connection()
         cache_key = self._generate_cache_key(source_lang, target_lang, translator, source_text)
-        cursor.execute(
-            '''
-            SELECT translated_text FROM translations WHERE id = ?
-        ''',
-            (cache_key,),
+        cache_files = sorted(
+            [f for f in os.listdir(self.cache_dir) if f.startswith('cache_') and f.endswith('.db')],
+            key=lambda x: int(x.split('_')[1].split('.')[0]),
         )
-        result = cursor.fetchone()
-        return result[0] if result else None
+        for cache_file in cache_files:
+            db_path = os.path.join(self.cache_dir, cache_file)
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                SELECT translated_text FROM translations WHERE id = ?
+            ''',
+                (cache_key,),
+            )
+            result = cursor.fetchone()
+            conn.close()
+            if result:
+                return result[0]
+        return None
 
     def save_translation(self, source_lang, target_lang, translator, source_text, translated_text):
-        conn, cursor = self._get_connection()
         cache_key = self._generate_cache_key(source_lang, target_lang, translator, source_text)
+        conn, cursor = self._get_connection()
         cursor.execute(
             '''
             INSERT OR REPLACE INTO translations (id, source_lang, target_lang, translator, source_text, translated_text)
