@@ -39,10 +39,6 @@ class PoFileProcessor:
         self.no_cache = no_cache
         self.file_name = os.path.basename(file_path)
         self.data = self._read_file()
-        self.translator = TranslatorFactory(config).get_translator_instance()
-        self.cache_handler = (
-            CacheHandler(os.path.join(os.path.expanduser("~"), ".translator_po", ".cache")) if not no_cache else None
-        )
         self.new_data = None
 
     def _read_file(self):
@@ -55,7 +51,7 @@ class PoFileProcessor:
             logger.error(f"Error reading file: {self.file_path}, Error: {e}")
         return None
 
-    def _translate_entry(self, entry):
+    def _translate_entry(self, entry, translator, cache_handler):
         global translation_error_flag
 
         try:
@@ -70,15 +66,15 @@ class PoFileProcessor:
                 temp_msgid = temp_msgid.replace(placeholder, placeholder_marker)
                 placeholder_map[placeholder_marker] = placeholder
 
-            if self.cache_handler:
-                cached_translation = self.cache_handler.get_translation(
+            if cache_handler:
+                cached_translation = cache_handler.get_translation(
                     self.config["source_lang"], self.config["target_lang"], self.config["translator"], temp_msgid
                 )
                 if cached_translation:
                     translated_text = cached_translation
                 else:
-                    translated_text = self.translator.translate(temp_msgid)
-                    self.cache_handler.save_translation(
+                    translated_text = translator.translate(temp_msgid)
+                    cache_handler.save_translation(
                         self.config["source_lang"],
                         self.config["target_lang"],
                         self.config["translator"],
@@ -86,7 +82,7 @@ class PoFileProcessor:
                         translated_text,
                     )
             else:
-                translated_text = self.translator.translate(temp_msgid)
+                translated_text = translator.translate(temp_msgid)
 
             for placeholder_marker, placeholder in placeholder_map.items():
                 translated_text = translated_text.replace(placeholder_marker, placeholder)
@@ -98,19 +94,24 @@ class PoFileProcessor:
             logger.error(f"{self.file_name}: {e}")
             raise
 
-    def _translate_entries_chunk(self, entries_chunk):
+    def _translate_entries_chunk(self, entries_chunk, config, no_cache):
         global shutdown_flag, translation_error_flag
 
         if shutdown_flag or translation_error_flag:
             logger.info("Shutting down translation due to interrupt signal or translation error.")
             return []
 
+        translator = TranslatorFactory(config).get_translator_instance()
+        cache_handler = (
+            CacheHandler(os.path.join(os.path.expanduser("~"), ".translator_po", ".cache")) if not no_cache else None
+        )
+
         translated_entries = []
         for entry in entries_chunk:
             if translation_error_flag:
                 break
 
-            translated_entries.append(self._translate_entry(entry))
+            translated_entries.append(self._translate_entry(entry, translator, cache_handler))
 
         return translated_entries
 
@@ -122,8 +123,8 @@ class PoFileProcessor:
             chunk_size = max(1, len(entries) // self.jobs)
             chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self.jobs) as executor:
-                worker_func = partial(self._translate_entries_chunk)
+            with concurrent.futures.ProcessPoolExecutor(max_workers=self.jobs) as executor:
+                worker_func = partial(self._translate_entries_chunk, config=self.config, no_cache=self.no_cache)
                 results = []
                 with tqdm(total=len(entries), desc=colored(f"Translating {self.file_name}", 'green')) as pbar:
                     future_to_chunk = {executor.submit(worker_func, chunk): chunk for chunk in chunks}
