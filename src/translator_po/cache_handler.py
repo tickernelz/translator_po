@@ -2,7 +2,7 @@ import hashlib
 import logging
 import os
 import sqlite3
-from threading import local, Lock
+from threading import local
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,6 @@ class CacheHandler:
     def __init__(self, cache_dir):
         self.cache_dir = cache_dir
         self.local = local()
-        self.lock = Lock()
         self._initialize_cache()
 
     def _initialize_cache(self):
@@ -21,19 +20,18 @@ class CacheHandler:
         self._open_new_cache_file()
 
     def _open_new_cache_file(self):
-        with self.lock:
-            cache_files = sorted(
-                [f for f in os.listdir(self.cache_dir) if f.startswith('cache_') and f.endswith('.db')],
-                key=lambda x: int(x.split('_')[1].split('.')[0]),
-            )
-            if cache_files:
-                last_cache_file = cache_files[-1]
-                self.db_path = os.path.join(self.cache_dir, last_cache_file)
-                if os.path.getsize(self.db_path) >= self.MAX_CACHE_SIZE:
-                    new_cache_index = int(last_cache_file.split('_')[1].split('.')[0]) + 1
-                    self.db_path = os.path.join(self.cache_dir, f'cache_{new_cache_index}.db')
-            else:
-                self.db_path = os.path.join(self.cache_dir, 'cache_0.db')
+        cache_files = sorted(
+            [f for f in os.listdir(self.cache_dir) if f.startswith('cache_') and f.endswith('.db')],
+            key=lambda x: int(x.split('_')[1].split('.')[0]),
+        )
+        if cache_files:
+            last_cache_file = cache_files[-1]
+            self.db_path = os.path.join(self.cache_dir, last_cache_file)
+            if os.path.getsize(self.db_path) >= self.MAX_CACHE_SIZE:
+                new_cache_index = int(last_cache_file.split('_')[1].split('.')[0]) + 1
+                self.db_path = os.path.join(self.cache_dir, f'cache_{new_cache_index}.db')
+        else:
+            self.db_path = os.path.join(self.cache_dir, 'cache_0.db')
 
     def _get_connection(self):
         if not hasattr(self.local, 'conn'):
@@ -82,16 +80,16 @@ class CacheHandler:
 
     def save_translation(self, source_lang, target_lang, translator, source_text, translated_text):
         cache_key = self._generate_cache_key(source_lang, target_lang, translator, source_text)
-        with self.lock:
-            conn, cursor = self._get_connection()
-            cursor.execute(
-                '''
-                INSERT OR REPLACE INTO translations (id, source_lang, target_lang, translator, source_text, translated_text)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''',
-                (cache_key, source_lang, target_lang, translator, source_text, translated_text),
-            )
-            conn.commit()
-            if os.path.getsize(self.db_path) >= self.MAX_CACHE_SIZE:
-                self._open_new_cache_file()
-                self.local.conn = None  # Force new connection in next call
+        conn, cursor = self._get_connection()
+        cursor.execute(
+            '''
+            INSERT OR REPLACE INTO translations (id, source_lang, target_lang, translator, source_text, translated_text)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''',
+            (cache_key, source_lang, target_lang, translator, source_text, translated_text),
+        )
+        conn.commit()
+        if os.path.getsize(self.db_path) >= self.MAX_CACHE_SIZE:
+            self._open_new_cache_file()
+            self.local.conn.close()
+            del self.local.conn
