@@ -13,10 +13,11 @@ class PoFileMerger:
 
     def merge_po_files(self):
         merged_po = polib.POFile()
-        for file_name in os.listdir(self.folder_path):
-            if file_name.endswith('.po'):
-                file_path = os.path.join(self.folder_path, file_name)
-                po = polib.pofile(file_path)
-                merged_po.extend(po)
+        for root, _, files in os.walk(self.folder_path):
+            for file_name in files:
+                if file_name.endswith('.po'):
+                    file_path = os.path.join(root, file_name)
+                    po = polib.pofile(file_path)
+                    merged_po.extend(po)
         merged_po.save(self.output_file)
         logger.info(f"Merged file saved: {self.output_file}")
