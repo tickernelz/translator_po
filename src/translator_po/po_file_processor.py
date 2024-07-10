@@ -58,13 +58,25 @@ class PoFileProcessor:
             if len(entry.msgid) > self.config.get("max_msgid_length", 300):
                 return entry
 
-            placeholders = re.findall(r'%\(\w+\)s|%\w|%%', entry.msgid)
             temp_msgid = entry.msgid
-            placeholder_map = {}
-            for i, placeholder in enumerate(placeholders):
-                placeholder_marker = f'PLACEHOLDER_{i}'
-                temp_msgid = temp_msgid.replace(placeholder, placeholder_marker)
-                placeholder_map[placeholder_marker] = placeholder
+
+            # Define regex patterns for placeholders that should not be translated
+            patterns = [
+                r"%\([a-zA-Z_]+\)s",  # Matches %(pos_name)s, %(session)s, etc.
+                r"%\s*\([a-zA-Z_]+\)",  # Matches % (object.name)
+                r"%s%%",  # Matches %s%%
+                r"%s",  # Matches %s
+                r"%%"  # Matches %%
+            ]
+
+            # Protect placeholders by replacing them with unique tokens
+            protected_parts = {}
+            for i, pattern in enumerate(patterns):
+                matches = re.findall(pattern, temp_msgid)
+                for match in matches:
+                    token = f"__PROTECTED_{i}_{len(protected_parts)}__"
+                    protected_parts[token] = match
+                    temp_msgid = temp_msgid.replace(match, token)
 
             if cache_handler:
                 cached_translation = cache_handler.get_translation(
@@ -84,8 +96,9 @@ class PoFileProcessor:
             else:
                 translated_text = translator.translate(temp_msgid)
 
-            for placeholder_marker, placeholder in placeholder_map.items():
-                translated_text = translated_text.replace(placeholder_marker, placeholder)
+            # Restore protected parts without adding extra spaces
+            for token, original in protected_parts.items():
+                translated_text = translated_text.replace(token, original)
 
             entry.msgstr = translated_text
             return entry
