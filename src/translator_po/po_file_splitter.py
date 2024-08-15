@@ -25,17 +25,25 @@ class PoFileSplitter:
         return None
 
     def split_po_file(self):
-        if self.data:
-            po = polib.pofile(self.data)
-            entries = po.untranslated_entries()
-            chunk_size = max(1, len(entries) // self.num_split)
-            chunks = [entries[i : i + chunk_size] for i in range(0, len(entries), chunk_size)]
+        if not self.data:
+            return
 
-            for i, chunk in enumerate(chunks):
-                split_po = polib.POFile()
-                split_po.extend(chunk)
-                output_file_name = os.path.splitext(self.file_name)[0] + f"_part_{i + 1}.po"
-                output_file_path = os.path.join(self.output_folder, output_file_name)
-                os.makedirs(self.output_folder, exist_ok=True)
-                split_po.save(output_file_path)
-                logger.info(f"Saved split file: {output_file_path}")
+        po = polib.pofile(self.data)
+        entries = po.untranslated_entries()
+        chunk_size = max(1, len(entries) // self.num_split)
+        chunks = [entries[i: i + chunk_size] for i in range(0, len(entries), chunk_size)]
+
+        # Calculate the width for zero-padding
+        width = len(str(self.num_split))
+
+        for i, chunk in enumerate(chunks):
+            split_po = polib.POFile()
+            split_po.extend(chunk)
+
+            # Format the output file name with zero-padding
+            output_file_name = f"{os.path.splitext(self.file_name)[0]}_part_{str(i + 1).zfill(width)}.po"
+            output_file_path = os.path.join(self.output_folder, output_file_name)
+
+            os.makedirs(self.output_folder, exist_ok=True)
+            split_po.save(output_file_path)
+            logger.info(f"Saved split file: {output_file_path}")
