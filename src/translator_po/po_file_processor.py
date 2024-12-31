@@ -100,6 +100,9 @@ class PoFileProcessor:
             for token, original in protected_parts.items():
                 translated_text = translated_text.replace(token, original)
 
+            if translated_text is None:
+                translated_text = ""
+
             entry.msgstr = translated_text
             return entry
         except Exception as e:

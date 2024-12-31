@@ -85,10 +85,7 @@ class MainController:
                 logger.info("Gracefully stopping file processing due to interrupt signal or translation error.")
                 break
 
-            try:
-                self.process_file(file_path, output_folder, odoo_output)
-            except Exception as e:
-                logger.error(f"Error processing file: {e}")
+            self.process_file(file_path, output_folder, odoo_output)
 
     def run(self):
         if self.args.split:
